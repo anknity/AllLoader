@@ -1,0 +1,69 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Outfit', 'Plus Jakarta Sans', sans-serif;
+  --font-tech: 'Space Grotesk', sans-serif;
+  
+  --color-coral: #FF4D26;
+  --color-coral-hover: #E03A14;
+  --color-coral-light: #FFF0ED;
+  --color-dark: #0F0F12;
+  --color-dark-surface: #17171C;
+  --color-gray-bg: #F4F4F7;
+  --color-gray-card: #EAEAEA;
+  --color-gray-subtle: #D8D8DF;
+}
+
+/* Hide scrollbars for clean mobile feel */
+::-webkit-scrollbar {
+  display: none !important;
+  width: 0px !important;
+  height: 0px !important;
+}
+
+* {
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Safe area support for iOS and Android notch / home bar */
+.safe-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+body {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  background-color: #F4F4F7;
+  color: #0F0F12;
+  overscroll-behavior-y: none;
+}
+
+/* Infinite Marquee for official platform logos */
+@keyframes marquee-scroll {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+.animate-marquee-smooth {
+  display: flex;
+  width: max-content;
+  animation: marquee-scroll 28s linear infinite;
+  will-change: transform;
+}
+
+.animate-marquee-smooth:hover,
+.animate-marquee-smooth:active {
+  animation-play-state: paused;
+}
+
+
