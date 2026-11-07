@@ -95,17 +95,7 @@ class TelegramBotService:
 
     def get_webapp_url(self, target_url: str = "") -> str:
         """Returns the WebApp URL or fallback with optional query param."""
-        tunnel_file = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "tunnel_url.txt"))
-        if os.path.exists(tunnel_file):
-            try:
-                with open(tunnel_file, "r") as f:
-                    t_url = f.read().strip()
-                    if t_url.startswith("https://"):
-                        self.webapp_url = t_url
-            except Exception:
-                pass
-
-        base = self.webapp_url or "https://all-in-one-downloader.fly.dev"
+        base = self.webapp_url or "https://allloader.fly.dev"
         if target_url:
             import urllib.parse
             return f"{base}?url={urllib.parse.quote(target_url)}"
