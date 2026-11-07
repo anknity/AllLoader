@@ -132,6 +132,30 @@ export default function App() {
   // Telegram User detection
   const tgUser = (window as any).Telegram?.WebApp?.initDataUnsafe?.user
 
+  // Channel Membership Verification State
+  const [isMember, setIsMember] = useState<boolean>(true)
+  const [channelInfo, setChannelInfo] = useState<{ channel: string; channel_url: string }>({
+    channel: '@toolboxkit',
+    channel_url: 'https://t.me/toolboxkit',
+  })
+
+  // Verify channel membership on mount
+  useEffect(() => {
+    if (tgUser?.id) {
+      fetch(`${API_BASE}/api/telegram/check-membership?user_id=${tgUser.id}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data && typeof data.is_member === 'boolean') {
+            setIsMember(data.is_member)
+            if (data.channel) {
+              setChannelInfo({ channel: data.channel, channel_url: data.channel_url || 'https://t.me/toolboxkit' })
+            }
+          }
+        })
+        .catch(() => {})
+    }
+  }, [tgUser?.id])
+
   // ── Telegram Mini App & URL Auto-Load ───────────────────────
   useEffect(() => {
     const tg = (window as any).Telegram?.WebApp
@@ -412,6 +436,76 @@ export default function App() {
   return (
     <div className="min-h-screen flex flex-col justify-between safe-top safe-bottom pb-28">
       <Toaster position="top-center" toastOptions={{ style: { borderRadius: '16px', background: '#0F0F12', color: '#fff', fontSize: '13px' } }} />
+
+      {/* ── Mandatory Channel Membership Modal ─────────────────── */}
+      {!isMember && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md p-4">
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-white rounded-3xl border border-black/10 max-w-sm w-full p-6 text-center shadow-2xl space-y-4"
+          >
+            <div className="w-16 h-16 bg-blue-50 border border-blue-200 rounded-2xl mx-auto flex items-center justify-center text-3xl shadow-xs">
+              📢
+            </div>
+            <div>
+              <h3 className="text-xl font-bold text-gray-900">Join Channel to Continue</h3>
+              <p className="text-xs text-gray-500 mt-1.5 leading-relaxed">
+                To unlock 4K downloads, 320kbps audio, and high-speed extraction, you must be a member of our official channel:
+              </p>
+              <div className="inline-block mt-3 px-3.5 py-1 bg-blue-50 border border-blue-200/80 rounded-full text-blue-600 font-bold text-xs tracking-wide">
+                {channelInfo.channel}
+              </div>
+            </div>
+
+            <div className="space-y-2 pt-2">
+              <button
+                onClick={() => {
+                  triggerHaptic('medium')
+                  const tg = (window as any).Telegram?.WebApp
+                  if (tg?.openTelegramLink) {
+                    tg.openTelegramLink(channelInfo.channel_url)
+                  } else {
+                    window.open(channelInfo.channel_url, '_blank')
+                  }
+                }}
+                className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-sm rounded-2xl shadow-md shadow-blue-500/25 transition active:scale-[0.98]"
+              >
+                📢 Join {channelInfo.channel}
+              </button>
+              <button
+                onClick={() => {
+                  triggerHaptic('light')
+                  if (tgUser?.id) {
+                    const tId = toast.loading('Verifying membership...')
+                    fetch(`${API_BASE}/api/telegram/check-membership?user_id=${tgUser.id}`)
+                      .then((res) => res.json())
+                      .then((data) => {
+                        if (data?.is_member) {
+                          setIsMember(true)
+                          toast.success('Membership verified! Welcome.', { id: tId })
+                          triggerHaptic('success')
+                        } else {
+                          toast.error(`Please tap the button above to join ${channelInfo.channel} first!`, { id: tId })
+                          triggerHaptic('error')
+                        }
+                      })
+                      .catch(() => {
+                        setIsMember(true)
+                        toast.dismiss(tId)
+                      })
+                  } else {
+                    setIsMember(true)
+                  }
+                }}
+                className="w-full py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-2xl border border-gray-200 transition active:scale-[0.98]"
+              >
+                ✅ I Have Joined (Verify)
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
 
       {/* ── Mobile Header ────────────────────────────────────── */}
       <header className="sticky top-0 z-30 bg-[#F4F4F7]/90 backdrop-blur-md border-b border-black/[0.06] px-4 py-3.5">

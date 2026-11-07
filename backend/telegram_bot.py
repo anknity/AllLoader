@@ -67,6 +67,8 @@ class TelegramBotService:
         self.webapp_url = os.getenv("WEBAPP_URL", "").strip().rstrip("/")
         self.bot_username = "loadrip_bot"
         self.bot_first_name = "AllinOneloader"
+        self.required_channel = os.getenv("REQUIRED_CHANNEL", "@toolboxkit").strip()
+        self.required_channel_url = os.getenv("REQUIRED_CHANNEL_URL", "https://t.me/toolboxkit").strip()
         self._polling_task: Optional[asyncio.Task] = None
         self._is_polling = False
 
@@ -150,6 +152,142 @@ class TelegramBotService:
                 }
             })
 
+    async def update_bot_avatar(self, image_path: str = ""):
+        """Sets or updates the bot's profile avatar on Telegram."""
+        if not self.token:
+            return
+        if not image_path:
+            possible_paths = [
+                os.path.join(os.path.dirname(__file__), "static", "banners", "video_banner.jpg"),
+                os.path.join(os.path.dirname(__file__), "..", "frontend", "public", "banners", "video_banner.jpg"),
+            ]
+            for p in possible_paths:
+                if os.path.isfile(p):
+                    image_path = p
+                    break
+        if not image_path or not os.path.isfile(image_path):
+            return
+
+        try:
+            import json
+            url = f"{TELEGRAM_API_BASE}/bot{self.token}/setMyProfilePhoto"
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                with open(image_path, "rb") as f:
+                    files = {"img": ("avatar.jpg", f, "image/jpeg")}
+                    data = {"photo": json.dumps({"type": "static", "photo": "attach://img"})}
+                    res = await client.post(url, data=data, files=files)
+                    if res.status_code == 200 and res.json().get("ok"):
+                        logger.info("✅ Bot profile photo updated successfully!")
+        except Exception as e:
+            logger.warning(f"Could not update bot profile photo: {e}")
+
+    async def is_channel_member(self, user_id: int | str) -> bool:
+        """Check if user has joined the required channel (@toolboxkit)."""
+        if not self.token or not user_id or not self.required_channel:
+            return True
+        try:
+            url = f"{TELEGRAM_API_BASE}/bot{self.token}/getChatMember"
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                res = await client.post(url, json={
+                    "chat_id": self.required_channel,
+                    "user_id": int(user_id)
+                })
+                res_data = res.json()
+                if res_data.get("ok"):
+                    status = res_data.get("result", {}).get("status")
+                    return status in ("creator", "administrator", "member", "restricted")
+                
+                desc = res_data.get("description", "")
+                if "member list is inaccessible" in desc or "chat not found" in desc:
+                    logger.warning(
+                        f"⚠️ Cannot check channel member: {desc}. "
+                        f"Please ensure @{self.bot_username} is added as an Administrator in {self.required_channel}."
+                    )
+                    # Don't block users if bot hasn't been granted admin rights yet
+                    return True
+                return False
+        except Exception as e:
+            logger.error(f"Error checking channel membership for {user_id}: {e}")
+            return True
+
+    async def send_join_channel_prompt(self, chat_id: int | str, user_id: int | str, message_id: Optional[int] = None):
+        """Send or edit message with mandatory channel join requirement."""
+        text = (
+            "🔒 **Channel Membership Required**\n\n"
+            "To use **All-in-One Downloader**, you must join our official Telegram channel first:\n\n"
+            f"👉 **Channel:** {self.required_channel}\n\n"
+            "1️⃣ Tap **'📢 Join Channel'** below.\n"
+            "2️⃣ Tap **'✅ I Have Joined'** to verify and unlock the Downloader!"
+        )
+        keyboard = {
+            "inline_keyboard": [
+                [{"text": f"📢 Join {self.required_channel}", "url": self.required_channel_url}],
+                [{"text": "✅ I Have Joined (Verify)", "callback_data": f"verify_join_{user_id}"}]
+            ]
+        }
+        if message_id:
+            await self._api_call("editMessageText", {
+                "chat_id": chat_id,
+                "message_id": message_id,
+                "text": text,
+                "parse_mode": "Markdown",
+                "reply_markup": keyboard
+            })
+        else:
+            await self._api_call("sendMessage", {
+                "chat_id": chat_id,
+                "text": text,
+                "parse_mode": "Markdown",
+                "reply_markup": keyboard
+            })
+
+    async def _send_welcome(self, chat_id: int | str, first_name: str, message_id: Optional[int] = None):
+        """Send or edit main welcome launcher message."""
+        welcome_text = (
+            f"👋 **Hey {first_name}! Welcome to All-in-One Downloader**\n\n"
+            "The most powerful media downloader on Telegram, designed with the sleek **ViralScope** interface.\n\n"
+            "**What you can download:**\n"
+            "• 🎬 **Ultra HD Video:** 4K, 1080p, 720p (MP4)\n"
+            "• 🎵 **Studio Audio:** 320kbps MP3 & Lossless WAV\n"
+            "• 📸 **Photo Albums:** Multi-image Pinterest boards & IG carousels\n"
+            "• ⚡ **Watermark-Free:** TikTok & Reels in original quality\n\n"
+            "👇 Tap **Open Downloader** below to launch the Mini App:"
+        )
+
+        keyboard = {
+            "inline_keyboard": [
+                [
+                    {
+                        "text": "🚀 Open Downloader Mini App",
+                        "web_app": {"url": self.get_webapp_url()}
+                    }
+                ],
+                [
+                    {"text": "🌐 1000+ Platforms", "callback_data": "view_platforms"},
+                    {"text": "📖 How to Use", "callback_data": "view_help"}
+                ],
+                [
+                    {"text": "ℹ️ Quality & Formats", "callback_data": "view_about"}
+                ]
+            ]
+        }
+
+        if message_id:
+            await self._api_call("editMessageText", {
+                "chat_id": chat_id,
+                "message_id": message_id,
+                "text": welcome_text,
+                "parse_mode": "Markdown",
+                "reply_markup": keyboard
+            })
+        else:
+            await self._api_call("sendMessage", {
+                "chat_id": chat_id,
+                "text": welcome_text,
+                "parse_mode": "Markdown",
+                "reply_markup": keyboard
+            })
+
     async def init_bot(self, base_url: str = ""):
         """Initialize bot, verify credentials, configure profile, and choose webhook vs polling."""
         if not self.token:
@@ -168,8 +306,9 @@ class TelegramBotService:
             logger.error("❌ Invalid TELEGRAM_BOT_TOKEN provided.")
             return
 
-        # Setup commands, description, menu button
+        # Setup commands, description, menu button, avatar
         await self.configure_bot_profile_and_commands()
+        await self.update_bot_avatar()
 
         # Decide between Webhook and Long-Polling
         if self.webapp_url.startswith("https://"):
@@ -229,6 +368,27 @@ class TelegramBotService:
             cb_id = cb.get("id")
             cb_data = cb.get("data", "")
             chat_id = cb.get("message", {}).get("chat", {}).get("id")
+            message_id = cb.get("message", {}).get("message_id")
+            first_name = cb.get("from", {}).get("first_name", "there")
+            from_user_id = cb.get("from", {}).get("id")
+
+            if cb_data.startswith("verify_join_"):
+                uid = cb_data.replace("verify_join_", "")
+                is_mem = await self.is_channel_member(uid)
+                if is_mem:
+                    await self._api_call("answerCallbackQuery", {
+                        "callback_query_id": cb_id,
+                        "text": "✅ Membership verified! Welcome.",
+                        "show_alert": False
+                    })
+                    await self._send_welcome(chat_id, first_name, message_id=message_id)
+                else:
+                    await self._api_call("answerCallbackQuery", {
+                        "callback_query_id": cb_id,
+                        "text": f"⚠️ You haven't joined {self.required_channel} yet!\n\nPlease tap the Join button first, then tap Verify.",
+                        "show_alert": True
+                    })
+                return
 
             await self._api_call("answerCallbackQuery", {"callback_query_id": cb_id})
 
@@ -247,47 +407,21 @@ class TelegramBotService:
         chat_id = message.get("chat", {}).get("id")
         text = (message.get("text") or "").strip()
         first_name = message.get("from", {}).get("first_name", "there")
+        user_id = message.get("from", {}).get("id")
 
         if not chat_id or not text:
             return
 
+        # ── Mandatory Channel Membership Check ──────────────────
+        if user_id:
+            is_mem = await self.is_channel_member(user_id)
+            if not is_mem:
+                await self.send_join_channel_prompt(chat_id, user_id)
+                return
+
         # ── Command: /start ──────────────────────────────────────
         if text.startswith("/start"):
-            welcome_text = (
-                f"👋 **Hey {first_name}! Welcome to All-in-One Downloader**\n\n"
-                "The most powerful media downloader on Telegram, designed with the sleek **ViralScope** interface.\n\n"
-                "**What you can download:**\n"
-                "• 🎬 **Ultra HD Video:** 4K, 1080p, 720p (MP4)\n"
-                "• 🎵 **Studio Audio:** 320kbps MP3 & Lossless WAV\n"
-                "• 📸 **Photo Albums:** Multi-image Pinterest boards & IG carousels\n"
-                "• ⚡ **Watermark-Free:** TikTok & Reels in original quality\n\n"
-                "👇 Tap **Open Downloader** below to launch the Mini App:"
-            )
-
-            keyboard = {
-                "inline_keyboard": [
-                    [
-                        {
-                            "text": "🚀 Open Downloader Mini App",
-                            "web_app": {"url": self.get_webapp_url()}
-                        }
-                    ],
-                    [
-                        {"text": "🌐 1000+ Platforms", "callback_data": "view_platforms"},
-                        {"text": "📖 How to Use", "callback_data": "view_help"}
-                    ],
-                    [
-                        {"text": "ℹ️ Quality & Formats", "callback_data": "view_about"}
-                    ]
-                ]
-            }
-
-            await self._api_call("sendMessage", {
-                "chat_id": chat_id,
-                "text": welcome_text,
-                "parse_mode": "Markdown",
-                "reply_markup": keyboard
-            })
+            await self._send_welcome(chat_id, first_name)
             return
 
         # ── Command: /platforms ──────────────────────────────────

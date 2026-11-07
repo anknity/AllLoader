@@ -99,6 +99,17 @@ async def get_platforms():
     ]
 
 
+@app.get("/api/telegram/check-membership")
+async def check_user_membership(user_id: int):
+    """Checks whether the user has joined the required Telegram channel (@toolboxkit)."""
+    is_member = await bot_service.is_channel_member(user_id)
+    return {
+        "is_member": is_member,
+        "channel": bot_service.required_channel,
+        "channel_url": bot_service.required_channel_url,
+    }
+
+
 @app.get("/api/downloader/direct/{file_token}")
 async def serve_direct_file(file_token: str):
     """Direct streaming endpoint for large files that exceed Telegram bot upload limits."""
@@ -140,6 +151,15 @@ async def api_download(request: DownloaderDownloadRequest):
     clean_url = request.url.strip()
     if not clean_url:
         raise HTTPException(status_code=400, detail="Missing URL parameter.")
+
+    # Check mandatory channel membership if user is in Telegram
+    if request.telegram_user_id and bot_service.is_configured:
+        is_mem = await bot_service.is_channel_member(request.telegram_user_id)
+        if not is_mem:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Channel Membership Required: Please join {bot_service.required_channel} to unlock downloads."
+            )
 
     try:
         file_path, filename, content_type = download_media_file(
